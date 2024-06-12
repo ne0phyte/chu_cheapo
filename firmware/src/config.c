@@ -26,8 +26,8 @@ static chu_cfg_t default_cfg = {
         .level = 127,
     },
     .tof = {
-        .offset = 80,
-        .pitch = 20,
+        .offset = 12,
+        .pitch = 30,
     },
     .sense = {
         .filter = 0x10,

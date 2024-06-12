@@ -8,62 +8,127 @@
 #include "air.h"
 
 #include <stdint.h>
+#include <stdio.h>
 #include <stdbool.h>
+#include "pico/stdlib.h"
 
 #include "hardware/gpio.h"
+#include "hardware/irq.h"
 
 #include "board_defs.h"
 #include "config.h"
 
-#include "gp2y0e.h"
-#include "vl53l0x.h"
-#include "i2c_hub.h"
+#define MEASURING_INTERVAL 20000
+#define MAX_DISTANCE 500
+#define SMOOTHING_BUFFER_SIZE 3
 
-static const uint8_t TOF_LIST[] = TOF_MUX_LIST;
-static uint8_t tof_model[sizeof(TOF_LIST)];
-static uint16_t distances[sizeof(TOF_LIST)];
+typedef struct {
+    uint trig_pin;
+    uint echo_pin;
+    volatile uint64_t start_time;
+    volatile uint64_t end_time;
+    volatile bool measuring;
+    volatile bool ready;
+    float distance;
+    float distance_smooth;
+    float smoothing_buffer[SMOOTHING_BUFFER_SIZE];
+    int buffer_index;
+    uint64_t last_update;
+} hc_sr04_sensor_t;
+
+hc_sr04_sensor_t sensor;
+
+void echo_irq_handler(uint gpio, uint32_t events) {
+    if (sensor.echo_pin == gpio && sensor.measuring) {
+        if (events & GPIO_IRQ_EDGE_RISE) {
+            sensor.start_time = time_us_64();
+        } else if (events & GPIO_IRQ_EDGE_FALL) {
+            sensor.end_time = time_us_64();
+            sensor.measuring = false;
+            sensor.ready = true;
+        }
+    }
+}
+
+void init_sensor(hc_sr04_sensor_t *sensor, uint trig_pin, uint echo_pin) {
+    sensor->trig_pin = trig_pin;
+    sensor->echo_pin = echo_pin;
+    sensor->measuring = false;
+    sensor->ready = false;
+    sensor->distance_smooth = -1;  // Initialize to an impossible value to ensure the first measurement is printed
+    sensor->buffer_index = 0;
+
+    for (int i = 0; i < SMOOTHING_BUFFER_SIZE; i++) {
+        sensor->smoothing_buffer[i] = 0;
+    }
+
+    gpio_init(sensor->trig_pin);
+    gpio_set_dir(sensor->trig_pin, GPIO_OUT);
+    gpio_put(sensor->trig_pin, 0);
+
+    gpio_init(sensor->echo_pin);
+    gpio_set_dir(sensor->echo_pin, GPIO_IN);
+    gpio_set_irq_enabled_with_callback(sensor->echo_pin, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, &echo_irq_handler);
+}
+
+void trigger_sensor(hc_sr04_sensor_t *sensor) {
+    gpio_put(sensor->trig_pin, 1);
+    sleep_us(10);
+    gpio_put(sensor->trig_pin, 0);
+    sensor->measuring = true;
+    sensor->ready = false;
+}
+
+void update_sensor(hc_sr04_sensor_t *sensor) {
+    if ((time_us_64() - sensor->last_update < MEASURING_INTERVAL)) {
+        return;
+    }
+    sensor->last_update = time_us_64();
+
+    if (sensor->ready) {
+        sensor->distance = 10.0f * (((sensor->end_time - sensor->start_time) * 0.0343) / 2.0);
+        if (sensor->distance > MAX_DISTANCE) {
+            sensor->distance = 0;
+        }
+        sensor->smoothing_buffer[sensor->buffer_index] = sensor->distance;
+        sensor->buffer_index = (sensor->buffer_index + 1) % SMOOTHING_BUFFER_SIZE;
+
+        // Calculate the average distance
+        float sum = 0;
+        for (int i = 0; i < SMOOTHING_BUFFER_SIZE; i++) {
+            sum += sensor->smoothing_buffer[i];
+        }
+        float average_distance = sum / SMOOTHING_BUFFER_SIZE;
+
+        if (average_distance < chu_cfg->tof.offset || average_distance > (chu_cfg->tof.offset + 6 * chu_cfg->tof.pitch)) {
+            //printf("[%d] Out of range ignored: %d cm\n", sensor->echo_pin, distance_cm);
+            average_distance = 0;
+        } else {
+            //printf("[%d] Distance: %d cm\n", sensor->echo_pin, distance_cm);
+        }
+        sensor->distance_smooth = average_distance;
+    }
+    trigger_sensor(sensor);
+}
+
 
 void air_init()
 {
-    i2c_init(I2C_PORT, I2C_FREQ);
-    gpio_set_function(I2C_SDA, GPIO_FUNC_I2C);
-    gpio_set_function(I2C_SCL, GPIO_FUNC_I2C);
-    gpio_pull_up(I2C_SDA);
-    gpio_pull_up(I2C_SCL);
-
-    i2c_hub_init();
-    vl53l0x_init(I2C_PORT, 0);
-
-    for (int i = 0; i < sizeof(TOF_LIST); i++) {
-        i2c_select(I2C_PORT, 1 << TOF_LIST[i]);
-        if (vl53l0x_is_present()) {
-            tof_model[i] = 1;
-        } else if (gp2y0e_is_present(I2C_PORT)) {
-            tof_model[i] = 2;
-        } else {
-            tof_model[i] = 0;
-        }
-        if (tof_model[i] == 1) {
-            vl53l0x_init_tof(i);
-            vl53l0x_start_continuous(i);
-        } else if (tof_model[i] == 2) {
-            gp2y03_init(I2C_PORT);
-        }
-    }
+    init_sensor(&sensor, 0, 1);
 }
 
 size_t air_num()
 {
-    return sizeof(TOF_LIST);
+    return 5;
 }
 
 static inline uint8_t air_bits(int dist, int offset)
 {
-    if ((dist < offset) || (dist == 4095)) {
+    if (dist < offset) {
         return 0;
     }
 
-    int pitch = chu_cfg->tof.pitch * 10;
+    int pitch = chu_cfg->tof.pitch;
     int index = (dist - offset) / pitch;
     if (index >= 6) {
         return 0;
@@ -74,51 +139,34 @@ static inline uint8_t air_bits(int dist, int offset)
 
 uint8_t air_bitmap()
 {
-    int offset = chu_cfg->tof.offset * 10;
-    int pitch = chu_cfg->tof.pitch * 10;
+    int offset = chu_cfg->tof.offset;
+    int pitch = chu_cfg->tof.pitch;
+    int distance = (int)sensor.distance_smooth;
     uint8_t bitmap = 0;
-    for (int i = 0; i < sizeof(TOF_LIST); i++) {
-        bitmap |= air_bits(distances[i], offset) |
-                  air_bits(distances[i], offset + pitch);
-    }
+    bitmap |= air_bits(distance, offset) | air_bits(distance, offset + pitch);
     return bitmap;
 }
 
 unsigned air_value(uint8_t index)
 {
-    if (index >= sizeof(TOF_LIST)) {
+    int offset = chu_cfg->tof.offset;
+    int pitch = chu_cfg->tof.pitch;
+    int distance = (int)sensor.distance_smooth;
+
+    int sensor_index = (distance - offset) / pitch;
+    if (sensor_index >= 6) {
         return 0;
+    } else {
+        return sensor_index + 1;
     }
-    int offset = chu_cfg->tof.offset * 10;
-    int pitch = chu_cfg->tof.pitch * 10;
-    uint8_t bitmap = air_bits(distances[index], offset) |
-                     air_bits(distances[index], offset + pitch);
-
-    for (int i = 0; i < 6; i++) {
-        if (bitmap & (1 << i)) {
-            return i + 1; // lowest detected position
-        }
-    }
-
-    return 0;
 }
 
 void air_update()
 {
-    for (int i = 0; i < sizeof(TOF_LIST); i++) {
-        i2c_select(I2C_PORT, 1 << TOF_LIST[i]);
-        if (tof_model[i] == 1) {
-            distances[i] = readRangeContinuousMillimeters(i) * 10;
-        } else if (tof_model[i] == 2) {
-            distances[i] = gp2y0e_dist16_mm(I2C_PORT) * 10;
-        }
-    }
+    update_sensor(&sensor);
 }
 
 uint16_t air_raw(uint8_t index)
 {
-    if (index >= sizeof(TOF_LIST)) {
-        return 0;
-    }
-    return distances[index];
+    return (int)sensor.distance_smooth;
 }

@@ -61,16 +61,16 @@ static void write_reg(uint8_t addr, uint8_t reg, uint8_t val)
 {
     uint8_t buf[] = {reg, val};
     i2c_write_blocking_until(I2C_PORT, addr, buf, 2, false,
-                             time_us_64() + IO_TIMEOUT_US);
+                             from_us_since_boot(time_us_64() + IO_TIMEOUT_US));
 }
 
 static uint8_t read_reg(uint8_t addr, uint8_t reg)
 {
     uint8_t value;
     i2c_write_blocking_until(I2C_PORT, addr, &reg, 1, true,
-                             time_us_64() + IO_TIMEOUT_US);
+                             from_us_since_boot(time_us_64() + IO_TIMEOUT_US));
     i2c_read_blocking_until(I2C_PORT, addr, &value, 1, false,
-                            time_us_64() + IO_TIMEOUT_US);
+                            from_us_since_boot(time_us_64() + IO_TIMEOUT_US));
     return value;
 }
 
@@ -136,9 +136,9 @@ void mpr121_init(uint8_t i2c_addr)
 static void mpr121_read_many(uint8_t addr, uint8_t reg, uint8_t *buf, int num)
 {
     i2c_write_blocking_until(I2C_PORT, addr, &reg, 1, true,
-                             time_us_64() + IO_TIMEOUT_US);
+                             from_us_since_boot(time_us_64() + IO_TIMEOUT_US));
     i2c_read_blocking_until(I2C_PORT, addr, buf, num, false,
-                             time_us_64() + IO_TIMEOUT_US * num / 2);
+                             from_us_since_boot(time_us_64() + IO_TIMEOUT_US * num / 2));
 }
 
 static void mpr121_read_many16(uint8_t addr, uint8_t reg, uint16_t *buf, int num)
