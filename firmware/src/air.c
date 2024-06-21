@@ -19,7 +19,7 @@
 #include "config.h"
 
 #define MEASURING_INTERVAL 20000
-#define MAX_DISTANCE 500
+#define MAX_DISTANCE 400
 #define SMOOTHING_BUFFER_SIZE 3
 
 typedef struct {
@@ -114,7 +114,7 @@ void update_sensor(hc_sr04_sensor_t *sensor) {
 
 void air_init()
 {
-    init_sensor(&sensor, 0, 1);
+    init_sensor(&sensor, 0, 21);
 }
 
 size_t air_num()

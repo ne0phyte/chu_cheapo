@@ -21,9 +21,6 @@
 #include "tusb.h"
 #include "usb_descriptors.h"
 
-#include "aime.h"
-#include "nfc.h"
-
 #include "board_defs.h"
 #include "save.h"
 #include "config.h"
@@ -132,39 +129,8 @@ static void run_lights()
         }
     }
 
-    uint32_t aime_color = aime_led_color();
-    if (aime_color > 0) {
-        uint8_t r = aime_color >> 16;
-        uint8_t g = aime_color >> 8;
-        uint8_t b = aime_color;
-
-        uint32_t blink = now / 100000;
-        aime_color = (blink & 1) ? rgb32(r, g, b, false) : 0;
-
-        rgb_set_color(34, aime_color);
-        rgb_set_color(35, aime_color);
-    }
 }
 
-const int aime_intf = 1;
-static void cdc_aime_putc(uint8_t byte)
-{
-    tud_cdc_n_write(aime_intf, &byte, 1);
-    tud_cdc_n_write_flush(aime_intf);
-}
-
-static void aime_run()
-{
-    if (tud_cdc_n_available(aime_intf)) {
-        uint8_t buf[32];
-        uint32_t count = tud_cdc_n_read(aime_intf, buf, sizeof(buf));
-
-        i2c_select(I2C_PORT, 1 << 5); // PN532 on IR1 (I2C mux chn 5)
-        for (int i = 0; i < count; i++) {
-            aime_feed(buf[i]);
-        }
-    }
-}
 
 static mutex_t core1_io_lock;
 static void core1_loop()
@@ -186,7 +152,7 @@ static void core0_loop()
         tud_task();
 
         cli_run();
-        aime_run();
+        // aime_run();
     
         save_loop();
         cli_fps_count(0);
@@ -215,13 +181,6 @@ void init()
     slider_init();
     air_init();
     rgb_init();
-
-    nfc_attach_i2c(I2C_PORT);
-    i2c_select(I2C_PORT, 1 << 5); // PN532 on IR1 (I2C mux chn 5)
-    nfc_init();
-    aime_init(cdc_aime_putc);
-    aime_virtual_aic(chu_cfg->aime.virtual_aic);
-    aime_set_mode(chu_cfg->aime.mode);
 
     cli_init("chu_pico>", "\n   << Chu Pico Controller >>\n"
                             " https://github.com/whowechina\n\n");

@@ -113,10 +113,9 @@ uint8_t const* tud_hid_descriptor_report_cb(uint8_t itf)
 
 enum { ITF_NUM_JOY, ITF_NUM_LED, ITF_NUM_NKRO,
        ITF_NUM_CLI, ITF_NUM_CLI_DATA,
-       ITF_NUM_AIME, ITF_NUM_AIME_DATA,
        ITF_NUM_TOTAL };
 
-#define CONFIG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + TUD_HID_DESC_LEN * 3 + TUD_CDC_DESC_LEN * 2)
+#define CONFIG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + TUD_HID_DESC_LEN * 3 + TUD_CDC_DESC_LEN)
 
 #define EPNUM_JOY 0x81
 #define EPNUM_LED 0x82
@@ -126,15 +125,11 @@ enum { ITF_NUM_JOY, ITF_NUM_LED, ITF_NUM_NKRO,
 #define EPNUM_CLI_OUT   0x06
 #define EPNUM_CLI_IN    0x86
 
-#define EPNUM_AIME_NOTIF 0x87
-#define EPNUM_AIME_OUT   0x08
-#define EPNUM_AIME_IN    0x88
-
 uint8_t const desc_configuration_joy[] = {
     // Config number, interface count, string index, total length, attribute,
     // power in mA
     TUD_CONFIG_DESCRIPTOR(1, ITF_NUM_TOTAL, 0, CONFIG_TOTAL_LEN,
-                          TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP, 200),
+                          TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP, 500),
 
     // Interface number, string index, protocol, report descriptor len, EP In
     // address, size & polling interval
@@ -152,9 +147,6 @@ uint8_t const desc_configuration_joy[] = {
 
     TUD_CDC_DESCRIPTOR(ITF_NUM_CLI, 7, EPNUM_CLI_NOTIF,
                        8, EPNUM_CLI_OUT, EPNUM_CLI_IN, 64),
-
-    TUD_CDC_DESCRIPTOR(ITF_NUM_AIME, 8, EPNUM_AIME_NOTIF,
-                       8, EPNUM_AIME_OUT, EPNUM_AIME_IN, 64),
 };
 
 // Invoked when received GET CONFIGURATION DESCRIPTOR
@@ -171,14 +163,13 @@ uint8_t const* tud_descriptor_configuration_cb(uint8_t index) {
 // array of pointer to string descriptors
 const char *string_desc_arr[] = {
     (const char[]){0x09, 0x04},  // 0: is supported language is English (0x0409)
-    "WHowe"       ,              // 1: Manufacturer
+    "ne0phyte",                  // 1: Manufacturer
     "Chu Pico Controller",       // 2: Product
     "123456",                    // 3: Serials, should use chip ID
     "Chu Pico Joystick",
     "Chu Pico LED",
     "Chu Pico NKRO",
-    "Chu Pico CLI Port",
-    "Chu Pico AIME Port",
+    "Chu Pico CLI Port"
 };
 
 // Invoked when received GET STRING DESCRIPTOR request

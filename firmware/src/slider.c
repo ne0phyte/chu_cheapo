@@ -56,7 +56,7 @@ void slider_update()
 
     touch_status = 0;
     for (int i = 0; i < 32; i++) {
-        uint8_t val = tmp & (1 << i);
+        uint32_t val = tmp & (1 << i);
         val = (val == 0 ? 0 : 1);
 
         uint8_t key_index = key_order[i];
@@ -85,25 +85,6 @@ void slider_init()
     slider_update_config();
 }
 
-// void slider_update()
-// {
-//     static uint16_t last_touched[3];
-
-//     touch[0] = mpr121_touched(MPR121_ADDR);
-//     touch[1] = mpr121_touched(MPR121_ADDR + 1);
-//     touch[2] = mpr121_touched(MPR121_ADDR + 2);
-
-//     for (int m = 0; m < 3; m++) {
-//         uint16_t just_touched = touch[m] & ~last_touched[m];
-//         last_touched[m] = touch[m];
-//         for (int i = 0; i < 12; i++) {
-//             if (just_touched & (1 << i)) {
-//                 touch_count[m * 12 + i]++;
-//             }
-//         }
-//     }
-// }
-
 const uint16_t *slider_raw()
 {
     uint16_t tmp[36];
@@ -119,17 +100,11 @@ const uint16_t *slider_raw()
 
 bool slider_touched(unsigned key)
 {
-    // return 0;
-    // if (key >= 32) {
-    //     return 0;
-    // }
-    // return touch[key / 12] & (1 << (key % 12));
-
     if (key >= 32) {
         return 0;
     }
 
-    return touch_status & (1 << (key % 12));
+    return touch_status & (1 << key);
 }
 
 unsigned slider_count(unsigned key)

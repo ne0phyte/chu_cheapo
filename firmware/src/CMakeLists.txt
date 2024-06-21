@@ -15,15 +15,13 @@ function(make_firmware board board_def)
 
     pico_generate_pio_header(${board} ${CMAKE_CURRENT_LIST_DIR}/ws2812.pio)
     
-    target_link_libraries(${board} PRIVATE aic)
-
     pico_add_extra_outputs(${board})
 
-    add_custom_command(TARGET ${board} PRE_BUILD
-    COMMAND touch ${CMAKE_CURRENT_SOURCE_DIR}/cli.c)
+    # add_custom_command(TARGET ${board} PRE_BUILD
+    # COMMAND touch ${CMAKE_CURRENT_SOURCE_DIR}/cli.c)
 
-    add_custom_command(TARGET ${board} POST_BUILD
-                       COMMAND cp ${board}.uf2 ${CMAKE_CURRENT_LIST_DIR}/..)
+    # add_custom_command(TARGET ${board} POST_BUILD
+    #                    COMMAND cp ${board}.uf2 ${CMAKE_CURRENT_LIST_DIR}/..)
 endfunction()
 
 make_firmware(chu_pico BOARD_CHU_PICO)

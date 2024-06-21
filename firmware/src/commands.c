@@ -15,9 +15,6 @@
 
 #include "i2c_hub.h"
 
-#include "nfc.h"
-#include "aime.h"
-
 #define SENSE_LIMIT_MAX 9
 #define SENSE_LIMIT_MIN -9
 
@@ -74,13 +71,6 @@ static void disp_hid()
            chu_cfg->hid.nkro ? "on" : "off" );
 }
 
-static void disp_aime()
-{
-    printf("[AIME]\n");
-    printf("   NFC Module: %s\n", nfc_module_name());
-    printf("  Virtual AIC: %s\n", chu_cfg->aime.virtual_aic ? "ON" : "OFF");
-    printf("         Mode: %d\n", chu_cfg->aime.mode);
-}
 
 void handle_display(int argc, char *argv[])
 {
@@ -96,11 +86,10 @@ void handle_display(int argc, char *argv[])
         disp_tof();
         disp_sense();
         disp_hid();
-        disp_aime();
         return;
     }
 
-    const char *choices[] = {"colors", "style", "tof", "sense", "hid", "aime"};
+    const char *choices[] = {"colors", "style", "tof", "sense", "hid"};
     switch (cli_match_prefix(choices, 6, argv[0])) {
         case 0:
             disp_colors();
@@ -116,9 +105,6 @@ void handle_display(int argc, char *argv[])
             break;
         case 4:
             disp_hid();
-            break;
-        case 5:
-            disp_aime();
             break;
         default:
             printf(usage);
@@ -395,75 +381,6 @@ static void handle_factory_reset()
     printf("Factory reset done.\n");
 }
 
-static void handle_nfc()
-{
-    i2c_select(I2C_PORT, 1 << 5); // PN532 on IR1 (I2C mux chn 5)
-    printf("NFC module: %s\n", nfc_module_name());
-    nfc_rf_field(true);
-    nfc_card_t card = nfc_detect_card();
-    nfc_rf_field(false);
-    printf("Card: %s", nfc_card_name(card.card_type));
-    for (int i = 0; i < card.len; i++) {
-        printf(" %02x", card.uid[i]);
-    }
-    printf("\n");
-}
-
-static bool handle_aime_mode(const char *mode)
-{
-    if (strcmp(mode, "0") == 0) {
-        chu_cfg->aime.mode = 0;
-    } else if (strcmp(mode, "1") == 0) {
-        chu_cfg->aime.mode = 1;
-    } else {
-        return false;
-    }
-    aime_set_mode(chu_cfg->aime.mode);
-    config_changed();
-    return true;
-}
-
-static bool handle_aime_virtual(const char *onoff)
-{
-    if (strcasecmp(onoff, "on") == 0) {
-        chu_cfg->aime.virtual_aic = 1;
-    } else if (strcasecmp(onoff, "off") == 0) {
-        chu_cfg->aime.virtual_aic = 0;
-    } else {
-        return false;
-    }
-    aime_virtual_aic(chu_cfg->aime.virtual_aic);
-    config_changed();
-    return true;
-}
-
-static void handle_aime(int argc, char *argv[])
-{
-    const char *usage = "Usage:\n"
-                        "    aime mode <0|1>\n"
-                        "    aime virtual <on|off>\n";
-    if (argc != 2) {
-        printf("%s", usage);
-        return;
-    }
-
-    const char *commands[] = { "mode", "virtual" };
-    int match = cli_match_prefix(commands, 2, argv[0]);
-    
-    bool ok = false;
-    if (match == 0) {
-        ok = handle_aime_mode(argv[1]);
-    } else if (match == 1) {
-        ok = handle_aime_virtual(argv[1]);
-    }
-
-    if (ok) {
-        disp_aime();
-    } else {
-        printf("%s", usage);
-    }
-}
-
 void commands_init()
 {
     cli_register("display", handle_display, "Display all config.");
@@ -477,6 +394,4 @@ void commands_init()
     cli_register("raw", handle_raw, "Show key raw readings.");
     cli_register("save", handle_save, "Save config to flash.");
     cli_register("factory", handle_factory_reset, "Reset everything to default.");
-    cli_register("nfc", handle_nfc, "NFC debug.");
-    cli_register("aime", handle_aime, "AIME settings.");
 }
